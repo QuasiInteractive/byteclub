@@ -162,3 +162,9 @@ a { color: var(--cyan); }
 .warning ul { margin: 0 0 10px; padding-left: 20px; display: grid; gap: 6px; }
 .warning strong { color: var(--gold); font-weight: 600; }
 .menu-label { white-space: nowrap; }
+
+/* a painted portrait sits straight on the window, like the party menu */
+.portrait-img { flex: none; width: 96px; height: 96px; object-fit: cover; margin: -6px 0 -6px -4px; filter: drop-shadow(2px 2px 0 rgba(0,0,0,.45)); }
+@media (max-width: 720px) { .portrait-img { width: 80px; height: 80px; } }
+.portrait { margin: 0 14px 0 12px; } /* centre the small boxes under the 96px portrait */
+@media (max-width: 720px) { .portrait { margin: 0 8px 0 6px; } }
