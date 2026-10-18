@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, ApiError, dayKey, fmtDay, fmtTime, type BookingResult, type Service, type Slot } from "./api";
+import { api, ApiError, dayKey, fmtDay, fmtTime, type BookingResult, type EnquiryResult, type Service, type Slot } from "./api";
 import { Glove } from "./Glove";
 import { Menu } from "./Menu";
 import { setSound, sfx, soundOn } from "./sound";
 
-type Screen = "title" | "quest" | "time" | "party" | "save" | "victory";
-const STEPS: { key: Screen; label: string }[] = [
-  { key: "quest", label: "Quest" }, { key: "time", label: "Time" }, { key: "party", label: "Party" }, { key: "save", label: "Save" },
+type Screen = "title" | "quest" | "warning" | "time" | "party" | "save" | "victory";
+const STEPS: { key: Screen; label: string; visitOnly?: boolean }[] = [
+  { key: "quest", label: "Quest" }, { key: "time", label: "Time", visitOnly: true }, { key: "party", label: "Party" }, { key: "save", label: "Save" },
 ];
 const HELP: Record<Screen, string> = {
   title: "Gold Coast · home visits · computers, phones, Wi-Fi",
-  quest: "What needs fixing? Choose a quest.",
+  quest: "Fix something at home, or build something new. Choose a quest.",
+  warning: "Making a game or an app is a real project. Read this first.",
   time: "Pick a day and a time for Nick to visit.",
   party: "Your details, so Nick can find you and confirm.",
   save: "Check everything, then save your booking.",
@@ -33,7 +34,7 @@ export default function App() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<BookingResult | null>(null);
+  const [result, setResult] = useState<BookingResult | EnquiryResult | null>(null);
   const [sound, setSoundState] = useState(soundOn());
   const [now, setNow] = useState(new Date());
 
@@ -42,6 +43,7 @@ export default function App() {
 
   const go = (s: Screen) => { setMessage(""); setScreen(s); };
   const shown = peek ?? quest;
+  const project = quest?.isProject ?? false;
 
   const loadSlots = () => {
     setSlots(null);
@@ -58,16 +60,29 @@ export default function App() {
   const toggleSound = () => { const on = !sound; setSound(on); setSoundState(on); if (on) sfx.confirm(); };
 
   const submit = async () => {
-    if (!quest || !slot) return;
+    if (!quest || (!project && !slot)) return;
     setBusy(true); setMessage("");
     try {
-      const r = await api.book({ serviceId: quest.id, start: slot.start, ...party, email: party.email || undefined, problem: party.problem || undefined });
+      if (project) {
+        const r = await api.enquire({ serviceId: quest.id, name: party.name, phone: party.phone, email: party.email || undefined, idea: party.problem });
+        setResult(r); sfx.victory(); go("victory");
+        return;
+      }
+      const r = await api.book({
+        serviceId: quest.id, start: slot!.start, name: party.name, phone: party.phone,
+        email: party.email || undefined, problem: party.problem || undefined,
+        suburb: party.suburb, address: party.address,
+      });
       setResult(r); sfx.victory(); go("victory");
     } catch (e) {
       sfx.error();
       const err = e as ApiError;
       if (err.status === 409) { setSlot(null); loadSlots(); setScreen("time"); setMessage(err.message); }
-      else if (err.status === 400) { setErrors(err.fields); setScreen("party"); setMessage(err.message); }
+      else if (err.status === 400) {
+        const f = { ...err.fields };
+        if (f.idea) { f.problem = f.idea; delete f.idea; } // the idea is typed into the same box
+        setErrors(f); setScreen("party"); setMessage(err.message);
+      }
       else setMessage(err.message);
     } finally { setBusy(false); }
   };
@@ -76,8 +91,12 @@ export default function App() {
     const e: Record<string, string> = {};
     if (!party.name.trim()) e.name = "Enter your name.";
     if (party.phone.replace(/\D/g, "").length < 8) e.phone = "Enter a phone number Nick can WhatsApp.";
-    if (!party.suburb.trim()) e.suburb = "Enter your suburb.";
-    if (!party.address.trim()) e.address = "Enter the address for the visit.";
+    if (project) {
+      if (party.problem.trim().length < 10) e.problem = "Tell Nick your idea in a sentence or two.";
+    } else {
+      if (!party.suburb.trim()) e.suburb = "Enter your suburb.";
+      if (!party.address.trim()) e.address = "Enter the address for the visit.";
+    }
     if (party.email && !party.email.includes("@")) e.email = "That email doesn't look right.";
     setErrors(e);
     if (Object.keys(e).length) { sfx.error(); return; }
@@ -97,9 +116,9 @@ export default function App() {
             <section className="pop">
               <PartyRow name="Nick" role="Tech wizard" lv={99} hp={[9999, 9999]} mp={[999, 999]} portrait="N" />
               <PartyRow name="Your device" role="Status: ???" hp={[12, 100]} portrait="?" hurt />
-              <p className="lead">A wild broken laptop appeared. Book a home visit and Nick joins your party.</p>
+              <p className="lead">A wild broken laptop appeared. Book a home visit and Nick joins your party. Got a game or app idea? He builds those too.</p>
               <Menu label="Main menu" initial="book" onSelect={(k) => k === "book" ? go("quest") : window.open(WHATSAPP, "_blank")}
-                    items={[{ key: "book", label: "Book a visit" }, { key: "whatsapp", label: "WhatsApp Nick" }]} />
+                    items={[{ key: "book", label: "Start a quest" }, { key: "whatsapp", label: "WhatsApp Nick" }]} />
             </section>
           )}
 
@@ -109,13 +128,40 @@ export default function App() {
               <Menu label="Choose your quest" initial={quest?.id}
                     onFocusChange={(k) => setPeek(services.find((s) => s.id === k) ?? null)}
                     onBack={() => go("title")}
-                    onSelect={(k) => { setQuest(services.find((s) => s.id === k)!); if (!slots) loadSlots(); go("time"); }}
-                    items={services.map((s) => ({ key: s.id, label: s.name, aside: s.blurb }))} />
+                    onSelect={(k) => {
+                      const q = services.find((s) => s.id === k)!;
+                      setQuest(q);
+                      if (q.isProject) go("warning"); else { if (!slots) loadSlots(); go("time"); }
+                    }}
+                    items={services.map((s) => ({
+                      key: s.id, label: s.name, aside: s.blurb,
+                      group: s.isProject ? "Build something · we'll chat on WhatsApp" : "Fix something · home visit",
+                    }))} />
               {shown && (
                 <div className="sub-win">
-                  <PartyRow name={`Your ${shown.device.toLowerCase()}`} role={`Status: ${shown.status}`} hp={[shown.deviceHp, 100]} portrait="?" hurt />
+                  {shown.isProject
+                    ? <PartyRow name={`Your ${shown.device.toLowerCase()}`} role={`Status: ${shown.status}`} hp={[shown.deviceHp, 100]} mp={[999, 999]} mpLabel="Ambition" portrait="★" />
+                    : <PartyRow name={`Your ${shown.device.toLowerCase()}`} role={`Status: ${shown.status}`} hp={[shown.deviceHp, 100]} portrait="?" hurt />}
                 </div>
               )}
+            </section>
+          )}
+
+          {screen === "warning" && quest && (
+            <section className="pop">
+              <h1 className="win-title warn-title">Heads up, adventurer</h1>
+              <div className="warning">
+                <p>{quest.id === "game" ? "Making a video game" : "Building an app"} is a real quest, not a side errand.</p>
+                <ul>
+                  <li>It takes <strong>months, not days</strong>. Good things take time to build and test.</li>
+                  <li>It <strong>costs real money</strong>. Professional work is priced like professional work.</li>
+                  <li>Send Nick your idea and he'll message you on WhatsApp. You get a <strong>proper quote</strong> before anything starts.</li>
+                </ul>
+                <p>Are you ready to fund your idea and see it through?</p>
+              </div>
+              <Menu label="Are you ready" initial="ready" columns={2} onBack={() => go("quest")}
+                    onSelect={(k) => k === "ready" ? go("party") : go("quest")}
+                    items={[{ key: "ready", label: "I'm ready" }, { key: "back", label: "Go back" }]} />
             </section>
           )}
 
@@ -149,49 +195,55 @@ export default function App() {
 
           {screen === "party" && (
             <section className="pop">
-              <h1 className="win-title">Party details</h1>
+              <h1 className="win-title">{project ? "Your idea" : "Party details"}</h1>
               <form className="form" noValidate onSubmit={(e) => { e.preventDefault(); checkParty(); }}
-                    onKeyDown={(e) => { if (e.key === "Escape") { sfx.back(); go("time"); } }}>
+                    onKeyDown={(e) => { if (e.key === "Escape") { sfx.back(); go(project ? "warning" : "time"); } }}>
                 <Field id="name" label="Name" autoFocus value={party.name} error={errors.name} autoComplete="name" onChange={(v) => setParty({ ...party, name: v })} placeholder="Mary Jones" />
                 <Field id="phone" label="Phone (WhatsApp)" value={party.phone} error={errors.phone} autoComplete="tel" inputMode="tel" onChange={(v) => setParty({ ...party, phone: v })} placeholder="0412 345 678" />
-                <Field id="suburb" label="Suburb" value={party.suburb} error={errors.suburb} autoComplete="address-level2" onChange={(v) => setParty({ ...party, suburb: v })} placeholder="Southport" />
-                <Field id="address" label="Address for the visit" value={party.address} error={errors.address} autoComplete="street-address" onChange={(v) => setParty({ ...party, address: v })} placeholder="12 Example St" />
+                {!project && <Field id="suburb" label="Suburb" value={party.suburb} error={errors.suburb} autoComplete="address-level2" onChange={(v) => setParty({ ...party, suburb: v })} placeholder="Southport" />}
+                {!project && <Field id="address" label="Address for the visit" value={party.address} error={errors.address} autoComplete="street-address" onChange={(v) => setParty({ ...party, address: v })} placeholder="12 Example St" />}
                 <Field id="email" label="Email (optional)" value={party.email} error={errors.email} autoComplete="email" inputMode="email" onChange={(v) => setParty({ ...party, email: v })} placeholder="mary@example.com" />
-                <Field id="problem" label="What's going on? (optional)" value={party.problem} error={errors.problem} multiline onChange={(v) => setParty({ ...party, problem: v })} placeholder="It's really slow and shows pop-ups" />
+                <Field id="problem" label={project ? "Your idea" : "What's going on? (optional)"} value={party.problem} error={errors.problem} multiline
+                       onChange={(v) => setParty({ ...party, problem: v })}
+                       placeholder={project ? (quest?.id === "game" ? "A cosy farming game set on the Gold Coast, for PC" : "An app that books my dog-walking clients") : "It's really slow and shows pop-ups"} />
                 <button type="submit" className="cta"><Glove className="glove-inline" /> Continue</button>
               </form>
             </section>
           )}
 
-          {screen === "save" && quest && slot && (
+          {screen === "save" && quest && (project || slot) && (
             <section className="pop">
-              <h1 className="win-title">Save booking?</h1>
+              <h1 className="win-title">{project ? "Send to Nick?" : "Save booking?"}</h1>
               <dl className="summary">
                 <dt>Quest</dt><dd>{quest.name}</dd>
-                <dt>When</dt><dd>{fmtDay(slot.start)}, {fmtTime(slot.start)}–{fmtTime(slot.end)}</dd>
-                <dt>Where</dt><dd>{party.address}, {party.suburb}</dd>
+                {project
+                  ? (<><dt>Next</dt><dd>Nick messages you on WhatsApp</dd></>)
+                  : (<><dt>When</dt><dd>{fmtDay(slot!.start)}, {fmtTime(slot!.start)}–{fmtTime(slot!.end)}</dd>
+                     <dt>Where</dt><dd>{party.address}, {party.suburb}</dd></>)}
                 <dt>Name</dt><dd>{party.name}</dd>
                 <dt>Phone</dt><dd>{party.phone}</dd>
-                {party.problem && (<><dt>Notes</dt><dd>{party.problem}</dd></>)}
+                {party.problem && (<><dt>{project ? "Idea" : "Notes"}</dt><dd>{party.problem}</dd></>)}
               </dl>
               {busy ? <p className="lead blink">Saving…</p> : (
                 <Menu label="Save booking" initial="yes" columns={2} onBack={() => go("party")}
                       onSelect={(k) => k === "yes" ? void submit() : go("party")}
-                      items={[{ key: "yes", label: "Yes, book it" }, { key: "no", label: "No, go back" }]} />
+                      items={[{ key: "yes", label: project ? "Yes, send it" : "Yes, book it" }, { key: "no", label: "No, go back" }]} />
               )}
             </section>
           )}
 
-          {screen === "victory" && result && slot && (
+          {screen === "victory" && result && (project || slot) && (
             <section className="pop victory">
               <h1 className="fanfare">Quest accepted!</h1>
-              <p className="lead">Nick joined {result.firstName}'s party.</p>
+              <p className="lead">{project ? `Idea received. Nick will message ${result.firstName} on WhatsApp.` : `Nick joined ${result.firstName}'s party.`}</p>
               <dl className="summary">
                 <dt>Quest</dt><dd>{result.service}</dd>
-                <dt>When</dt><dd>{fmtDay(slot.start)}, {fmtTime(slot.start)}</dd>
-                <dt>Next</dt><dd>Nick will WhatsApp you to confirm.</dd>
+                {project
+                  ? (<><dt>Next</dt><dd>Keep an eye on WhatsApp. The quote comes after you chat.</dd></>)
+                  : (<><dt>When</dt><dd>{fmtDay(slot!.start)}, {fmtTime(slot!.start)}</dd>
+                     <dt>Next</dt><dd>Nick will WhatsApp you to confirm.</dd></>)}
               </dl>
-              <p className="spoils">Received: 1 booking · EXP +100</p>
+              <p className="spoils">{project ? "Received: 1 idea · Quote to follow" : "Received: 1 booking · EXP +100"}</p>
               <Menu label="Done" onSelect={reset} items={[{ key: "done", label: "Back to menu" }]} />
             </section>
           )}
@@ -201,7 +253,7 @@ export default function App() {
 
         <aside className="side">
           <nav className="win steps" aria-label="Booking steps">
-            {STEPS.map((s) => (
+            {STEPS.filter((s) => !(project && s.visitOnly)).map((s) => (
               <div key={s.key} className={`step${screen === s.key ? " is-on" : ""}`} aria-current={screen === s.key ? "step" : undefined}>
                 {screen === s.key && <Glove className="glove" />}{s.label}
               </div>
@@ -216,15 +268,15 @@ export default function App() {
           </button>
         </aside>
 
-        <footer className="win help">{HELP[screen]}</footer>
+        <footer className="win help">{screen === "victory" && project ? "Idea sent. Nick will message you on WhatsApp." : HELP[screen]}</footer>
       </div>
       <p className="brand">BYTE CLUB · Gold Coast tech help · <a href={WHATSAPP}>WhatsApp 0467 696 556</a></p>
     </div>
   );
 }
 
-function PartyRow({ name, role, lv, hp, mp, portrait, hurt }: {
-  name: string; role: string; lv?: number; hp: [number, number]; mp?: [number, number]; portrait: string; hurt?: boolean;
+function PartyRow({ name, role, lv, hp, mp, mpLabel = "MP", portrait, hurt }: {
+  name: string; role: string; lv?: number; hp: [number, number]; mp?: [number, number]; mpLabel?: string; portrait: string; hurt?: boolean;
 }) {
   const pct = Math.max(2, Math.round((hp[0] / hp[1]) * 100));
   return (
@@ -235,7 +287,7 @@ function PartyRow({ name, role, lv, hp, mp, portrait, hurt }: {
         {lv !== undefined && <div><span className="label">LV</span> {lv}</div>}
         <div className="bar-row"><span className="label">HP</span> <span>{hp[0]}/{hp[1]}</span>
           <div className="bar"><i style={{ width: `${pct}%` }} className={pct < 30 ? "low" : ""} /></div></div>
-        {mp && <div className="bar-row"><span className="label">MP</span> <span>{mp[0]}/{mp[1]}</span>
+        {mp && <div className="bar-row"><span className="label">{mpLabel}</span> <span>{mp[0]}/{mp[1]}</span>
           <div className="bar"><i className="mp" style={{ width: "100%" }} /></div></div>}
       </div>
     </div>

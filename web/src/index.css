@@ -153,3 +153,12 @@ a { color: var(--cyan); }
 /* only the menu you're in gets the live glove; others keep a faded, still one (like the original) */
 .menu:not(:focus-within) .glove { opacity: .45; animation: none; }
 .menu:not(:focus-within) .menu-item.is-focus { background: none; }
+
+.menu-group { color: var(--gold); font-size: 14px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 10px 0 2px 8px; }
+.menu-group:first-child { padding-top: 0; }
+.warn-title { color: var(--gold); }
+.warning { font-size: 18px; }
+.warning p { margin: 0 0 8px; }
+.warning ul { margin: 0 0 10px; padding-left: 20px; display: grid; gap: 6px; }
+.warning strong { color: var(--gold); font-weight: 600; }
+.menu-label { white-space: nowrap; }
