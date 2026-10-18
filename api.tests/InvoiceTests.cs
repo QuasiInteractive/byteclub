@@ -39,6 +39,8 @@ public class InvoiceRuleTests
         Assert.True(pdf.Length > 1000);
         Assert.Equal("%PDF", System.Text.Encoding.ASCII.GetString(pdf, 0, 4));
         Assert.False(biz.HasPaymentDetails);
+        biz.Bsb = "none"; biz.AccountNumber = "none"; biz.PayId = "none";
+        Assert.False(biz.HasPaymentDetails); // placeholders from Azure count as blank
         biz.Bsb = "000-000"; biz.AccountNumber = "00000000";
         Assert.True(biz.HasPaymentDetails);
         Assert.True(InvoicePdf.Render(inv, biz).Length > 1000);

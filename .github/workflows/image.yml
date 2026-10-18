@@ -1,0 +1,48 @@
+name: image
+
+on:
+  push:
+    branches: [master]
+    paths: [api/**, web/**, Dockerfile, .github/workflows/image.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The FF7 menu sounds are not in the repo (they're Square Enix's). They live in a repo
+      # secret as a base64 tarball and are unpacked into the build only. If the secret is
+      # missing, the site falls back to its own synthesised sounds.
+      - name: Add menu sounds
+        env:
+          SFX: ${{ secrets.SFX_TGZ_B64 }}
+        run: |
+          if [ -n "$SFX" ]; then
+            mkdir -p web/public/sfx
+            echo "$SFX" | base64 -d | tar -xz -C web/public/sfx
+            ls web/public/sfx
+          else
+            echo "no SFX secret: using the built-in synth sounds"
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/quasiinteractive/byteclub:latest
+            ghcr.io/quasiinteractive/byteclub:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

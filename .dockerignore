@@ -1,0 +1,12 @@
+**/bin
+**/obj
+**/node_modules
+api/wwwroot
+api.tests
+*.db
+*.db-shm
+*.db-wal
+.git
+.github
+.env
+.env.*
