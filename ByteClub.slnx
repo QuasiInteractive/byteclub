@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/api.tests/">
+    <Project Path="api.tests/ByteClub.Api.Tests.csproj" />
+  </Folder>
+  <Folder Name="/api/">
+    <Project Path="api/ByteClub.Api.csproj" />
+  </Folder>
+</Solution>

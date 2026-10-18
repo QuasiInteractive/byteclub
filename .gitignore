@@ -1,0 +1,11 @@
+bin/
+obj/
+node_modules/
+api/wwwroot/
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.*
+.vs/
+*.user
