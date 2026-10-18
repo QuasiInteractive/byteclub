@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using ByteClub.Api;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ByteClub.Api.Tests;
 
@@ -11,12 +12,24 @@ public class BookingApiTests : IClassFixture<BookingApiTests.Factory>
     {
         private readonly string _db = Path.Combine(Path.GetTempPath(), $"byteclub-test-{Guid.NewGuid():N}.db");
 
-        protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder) =>
+        public RecordingNotifier Notifier { get; } = new();
+
+        protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
+        {
             builder.UseSetting("ConnectionStrings:ByteClub", $"Data Source={_db}");
+            builder.ConfigureServices(s => s.AddSingleton<IBookingNotifier>(Notifier));
+        }
+    }
+
+    public sealed class RecordingNotifier : IBookingNotifier
+    {
+        public List<(Booking Booking, Service Service)> Sent { get; } = [];
+        public Task NotifyAsync(Booking b, Service s, CancellationToken ct = default) { lock (Sent) Sent.Add((b, s)); return Task.CompletedTask; }
     }
 
     private readonly HttpClient _http;
-    public BookingApiTests(Factory f) => _http = f.CreateClient();
+    private readonly Factory _f;
+    public BookingApiTests(Factory f) { _f = f; _http = f.CreateClient(); }
 
     private async Task<Slot> FirstOpenSlot() =>
         (await _http.GetFromJsonAsync<List<Slot>>("/api/slots"))!.First();
@@ -40,6 +53,7 @@ public class BookingApiTests : IClassFixture<BookingApiTests.Factory>
         var slot = await FirstOpenSlot();
         var first = await _http.PostAsJsonAsync("/api/bookings", Request(slot.Start));
         Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+        Assert.Contains(_f.Notifier.Sent, n => n.Booking.Start == slot.Start.ToUniversalTime() && n.Service.Id == "laptop");
 
         var second = await _http.PostAsJsonAsync("/api/bookings", Request(slot.Start));
         Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);

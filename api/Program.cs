@@ -10,6 +10,8 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<Availability>();
 builder.Services.AddDbContext<ByteClubDb>(o =>
     o.UseSqlite(builder.Configuration.GetConnectionString("ByteClub") ?? "Data Source=byteclub.db"));
+builder.Services.AddSingleton(builder.Configuration.GetSection("Notify").Get<NotifyOptions>() ?? new());
+builder.Services.AddHttpClient<IBookingNotifier, NtfyNotifier>(c => c.Timeout = TimeSpan.FromSeconds(5));
 builder.Services.AddProblemDetails();
 builder.Services.AddRateLimiter(o =>
 {
@@ -34,7 +36,7 @@ api.MapGet("/services", () => Services.All);
 
 api.MapGet("/slots", async (ByteClubDb db, Availability av) => av.OpenSlots(await TakenSlots(db)));
 
-api.MapPost("/bookings", async (BookingRequest req, ByteClubDb db, Availability av, TimeProvider clock) =>
+api.MapPost("/bookings", async (BookingRequest req, ByteClubDb db, Availability av, TimeProvider clock, IBookingNotifier notify) =>
 {
     var errors = BookingValidation.Validate(req);
     if (errors.Count > 0)
@@ -54,6 +56,7 @@ api.MapPost("/bookings", async (BookingRequest req, ByteClubDb db, Availability 
     catch (DbUpdateException) { return Results.Conflict(new { error = "That time was just taken. Pick another." }); }
 
     var service = Services.Find(req.ServiceId)!;
+    await notify.NotifyAsync(booking, service); // logs and carries on if ntfy is down
     return Results.Created($"/api/bookings/{booking.Id}",
         new { booking.Id, service = service.Name, booking.Start, firstName = booking.Name.Split(' ')[0] });
 }).RequireRateLimiting("bookings");

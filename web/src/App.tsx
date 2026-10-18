@@ -16,7 +16,7 @@ const HELP: Record<Screen, string> = {
   save: "Check everything, then save your booking.",
   victory: "Booking saved. Nick will confirm on WhatsApp.",
 };
-const WHATSAPP = "https://wa.me/64211902813";
+const WHATSAPP = "https://wa.me/61467696556"; // Byte Club WhatsApp (0467 696 556), live 2026-10-18
 
 type Party = { name: string; phone: string; email: string; suburb: string; address: string; problem: string };
 const EMPTY: Party = { name: "", phone: "", email: "", suburb: "", address: "", problem: "" };
@@ -218,7 +218,7 @@ export default function App() {
 
         <footer className="win help">{HELP[screen]}</footer>
       </div>
-      <p className="brand">BYTE CLUB · Gold Coast tech help · <a href={WHATSAPP}>WhatsApp +64 21 190 2813</a></p>
+      <p className="brand">BYTE CLUB · Gold Coast tech help · <a href={WHATSAPP}>WhatsApp 0467 696 556</a></p>
     </div>
   );
 }
