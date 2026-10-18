@@ -1,6 +1,8 @@
 using System.Threading.RateLimiting;
 using ByteClub.Api;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -9,8 +11,28 @@ var availability = builder.Configuration.GetSection("Availability").Get<Availabi
 builder.Services.AddSingleton(availability);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<Availability>();
+// SQLite on a dev machine; Azure SQL in production (passwordless: the app signs in with its
+// managed identity, see infra/main.bicep). The free serverless database pauses when idle, so
+// connections retry while it wakes.
+var dbProvider = builder.Configuration["Database:Provider"] ?? "Sqlite";
+var connection = builder.Configuration.GetConnectionString("ByteClub") ?? "Data Source=byteclub.db";
 builder.Services.AddDbContext<ByteClubDb>(o =>
-    o.UseSqlite(builder.Configuration.GetConnectionString("ByteClub") ?? "Data Source=byteclub.db"));
+{
+    if (dbProvider == "SqlServer")
+        o.UseSqlServer(connection, sql => sql.EnableRetryOnFailure(10, TimeSpan.FromSeconds(10), null));
+    else
+        o.UseSqlite(connection);
+});
+// Sign-in cookies are encrypted with keys kept in the database, so a restart or a second
+// replica doesn't sign Nick out.
+builder.Services.AddDataProtection().SetApplicationName("byteclub").PersistKeysToDbContext<ByteClubDb>();
+builder.Services.Configure<ForwardedHeadersOptions>(o =>
+{
+    // behind Azure's ingress: the visitor's real IP is in X-Forwarded-For (the rate limit needs it)
+    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    o.KnownIPNetworks.Clear();
+    o.KnownProxies.Clear();
+});
 builder.Services.AddSingleton(builder.Configuration.GetSection("Notify").Get<NotifyOptions>() ?? new());
 builder.Services.AddHttpClient<IBookingNotifier, NtfyNotifier>(c => c.Timeout = TimeSpan.FromSeconds(5));
 builder.Services.AddSingleton(builder.Configuration.GetSection("Business").Get<BusinessOptions>() ?? new());
@@ -41,9 +63,9 @@ builder.Services.AddRateLimiter(o =>
 
 var app = builder.Build();
 
-using (var scope = app.Services.CreateScope())
-    scope.ServiceProvider.GetRequiredService<ByteClubDb>().Database.EnsureCreated();
+await EnsureDatabase(app);
 
+app.UseForwardedHeaders();
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
@@ -110,6 +132,25 @@ app.MapGet("/healthz", () => Results.Ok(new { ok = true }));
 app.MapFallbackToFile("index.html");
 
 app.Run();
+
+// A paused serverless database can take up to a minute to wake: keep trying before giving up.
+static async Task EnsureDatabase(WebApplication app)
+{
+    for (var attempt = 1; ; attempt++)
+    {
+        try
+        {
+            using var scope = app.Services.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<ByteClubDb>().Database.EnsureCreatedAsync();
+            return;
+        }
+        catch (Exception e) when (attempt < 8)
+        {
+            app.Logger.LogWarning("Database not ready ({Message}); retrying", e.Message);
+            await Task.Delay(TimeSpan.FromSeconds(10));
+        }
+    }
+}
 
 static async Task<List<DateTimeOffset>> TakenSlots(ByteClubDb db) =>
     await db.Bookings.Where(b => b.ActiveSlot != null).Select(b => b.ActiveSlot!.Value).ToListAsync();

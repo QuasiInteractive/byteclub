@@ -1,9 +1,11 @@
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace ByteClub.Api;
 
-public sealed class ByteClubDb(DbContextOptions<ByteClubDb> options) : DbContext(options)
+public sealed class ByteClubDb(DbContextOptions<ByteClubDb> options) : DbContext(options), IDataProtectionKeyContext
 {
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
     public DbSet<Booking> Bookings => Set<Booking>();
     public DbSet<Enquiry> Enquiries => Set<Enquiry>();
     public DbSet<Invoice> Invoices => Set<Invoice>();

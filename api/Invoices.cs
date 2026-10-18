@@ -22,10 +22,14 @@ public sealed class BusinessOptions
     public string GstNote { get; set; } = "Not registered for GST - no GST has been charged.";
     public decimal DefaultRate { get; set; } = 80m;
     public int DaysToPay { get; set; } = 7;
-    public string? AccountName { get; set; }
-    public string? Bsb { get; set; }
-    public string? AccountNumber { get; set; }
-    public string? PayId { get; set; }
+    // Azure secrets can't be empty, so an unused one is stored as "none": treat it as blank.
+    public string? AccountName { get; set => field = Real(value); }
+    public string? Bsb { get; set => field = Real(value); }
+    public string? AccountNumber { get; set => field = Real(value); }
+    public string? PayId { get; set => field = Real(value); }
+
+    private static string? Real(string? s) =>
+        string.IsNullOrWhiteSpace(s) || s.Trim().Equals("none", StringComparison.OrdinalIgnoreCase) ? null : s.Trim();
 
     public bool HasPaymentDetails => !string.IsNullOrWhiteSpace(PayId) ||
         (!string.IsNullOrWhiteSpace(Bsb) && !string.IsNullOrWhiteSpace(AccountNumber));
