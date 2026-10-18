@@ -172,3 +172,9 @@ a { color: var(--cyan); }
 /* device art: a touch smaller than Nick's portrait so he stays the hero */
 .device-img { width: 100px; height: 100px; margin: -6px 4px -6px 0; }
 @media (max-width: 720px) { .device-img { width: 82px; height: 82px; } }
+
+/* dashboard bits */
+.cta.ghost { border-color: #7f8bc4; background: none; font-weight: 500; }
+.history { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 17px; }
+.history li span:first-child { color: var(--cyan); margin-right: 8px; }
+.steps .menu-aside { color: var(--gold); font-weight: 600; }
