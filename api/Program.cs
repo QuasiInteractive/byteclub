@@ -13,6 +13,7 @@ builder.Services.AddDbContext<ByteClubDb>(o =>
     o.UseSqlite(builder.Configuration.GetConnectionString("ByteClub") ?? "Data Source=byteclub.db"));
 builder.Services.AddSingleton(builder.Configuration.GetSection("Notify").Get<NotifyOptions>() ?? new());
 builder.Services.AddHttpClient<IBookingNotifier, NtfyNotifier>(c => c.Timeout = TimeSpan.FromSeconds(5));
+builder.Services.AddSingleton(builder.Configuration.GetSection("Business").Get<BusinessOptions>() ?? new());
 builder.Services.AddSingleton<AdminLogin>();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(o =>
 {
@@ -104,6 +105,7 @@ api.MapPost("/enquiries", async (EnquiryRequest req, ByteClubDb db, TimeProvider
 }).RequireRateLimiting("bookings");
 
 app.MapAdmin();
+app.MapInvoices();
 app.MapGet("/healthz", () => Results.Ok(new { ok = true }));
 app.MapFallbackToFile("index.html");
 
