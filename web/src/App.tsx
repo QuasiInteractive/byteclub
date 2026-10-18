@@ -283,7 +283,7 @@ function PartyRow({ name, role, lv, hp, mp, mpLabel = "MP", portrait, image, hur
   return (
     <div className="party-row">
       {image
-        ? <img className="portrait-img" src={image} alt={`${name}'s portrait`} width={96} height={96} />
+        ? <img className="portrait-img" src={image} alt={`${name}'s portrait`} width={116} height={116} />
         : <div className={`portrait${hurt ? " hurt" : ""}`}>{portrait}</div>}
       <div className="stats">
         <div className="name">{name} <span className="label">{role}</span></div>
