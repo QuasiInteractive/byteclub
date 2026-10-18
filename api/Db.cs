@@ -6,6 +6,7 @@ public sealed class ByteClubDb(DbContextOptions<ByteClubDb> options) : DbContext
 {
     public DbSet<Booking> Bookings => Set<Booking>();
     public DbSet<Enquiry> Enquiries => Set<Enquiry>();
+    public DbSet<Invoice> Invoices => Set<Invoice>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -23,5 +24,15 @@ public sealed class ByteClubDb(DbContextOptions<ByteClubDb> options) : DbContext
         var enquiry = b.Entity<Enquiry>();
         enquiry.Property(x => x.Status).HasConversion<string>();
         enquiry.Property(x => x.CreatedAt).HasConversion(v => v.UtcTicks, v => new DateTimeOffset(v, TimeSpan.Zero));
+
+        var invoice = b.Entity<Invoice>();
+        invoice.Property(x => x.Status).HasConversion<string>();
+        invoice.Property(x => x.Total).HasConversion<double>(); // SQLite has no decimal type
+        invoice.Property(x => x.PaidAt).HasConversion(
+            v => v.HasValue ? v.Value.UtcTicks : (long?)null,
+            v => v.HasValue ? new DateTimeOffset(v.Value, TimeSpan.Zero) : null);
+        invoice.HasIndex(x => x.Number).IsUnique(); // INV-0001, INV-0002... never repeated
+        invoice.Ignore(x => x.Lines);
+        invoice.Ignore(x => x.NumberText);
     }
 }
