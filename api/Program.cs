@@ -1,5 +1,6 @@
 using System.Threading.RateLimiting;
 using ByteClub.Api;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,6 +13,20 @@ builder.Services.AddDbContext<ByteClubDb>(o =>
     o.UseSqlite(builder.Configuration.GetConnectionString("ByteClub") ?? "Data Source=byteclub.db"));
 builder.Services.AddSingleton(builder.Configuration.GetSection("Notify").Get<NotifyOptions>() ?? new());
 builder.Services.AddHttpClient<IBookingNotifier, NtfyNotifier>(c => c.Timeout = TimeSpan.FromSeconds(5));
+builder.Services.AddSingleton<AdminLogin>();
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(o =>
+{
+    o.Cookie.Name = "byteclub_admin";
+    o.Cookie.HttpOnly = true;
+    o.Cookie.SameSite = SameSiteMode.Strict; // plus JSON-only endpoints: no cross-site requests get in
+    o.Cookie.SecurePolicy = builder.Environment.IsDevelopment() ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
+    o.ExpireTimeSpan = TimeSpan.FromDays(30);
+    o.SlidingExpiration = true;
+    // an API answers 401/403, it doesn't redirect to a login page
+    o.Events.OnRedirectToLogin = ctx => { ctx.Response.StatusCode = 401; return Task.CompletedTask; };
+    o.Events.OnRedirectToAccessDenied = ctx => { ctx.Response.StatusCode = 403; return Task.CompletedTask; };
+});
+builder.Services.AddAuthorization();
 builder.Services.AddProblemDetails();
 // bookings + enquiries per visitor (IP) per 10 minutes; tests raise it
 var perTenMinutes = builder.Configuration.GetValue<int?>("RateLimit:PerTenMinutes") ?? 5;
@@ -29,6 +44,8 @@ using (var scope = app.Services.CreateScope())
     scope.ServiceProvider.GetRequiredService<ByteClubDb>().Database.EnsureCreated();
 
 app.UseRateLimiter();
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
@@ -86,6 +103,7 @@ api.MapPost("/enquiries", async (EnquiryRequest req, ByteClubDb db, TimeProvider
         new { enquiry.Id, service = service.Name, firstName = enquiry.Name.Split(' ')[0] });
 }).RequireRateLimiting("bookings");
 
+app.MapAdmin();
 app.MapGet("/healthz", () => Results.Ok(new { ok = true }));
 app.MapFallbackToFile("index.html");
 

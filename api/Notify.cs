@@ -38,7 +38,7 @@ public sealed class NtfyNotifier(HttpClient http, NotifyOptions options, ILogger
         req.Headers.Add("Title", Rfc2047(msg.Title));
         req.Headers.Add("Tags", msg.Tags);
         req.Headers.Add("Priority", "high");
-        req.Headers.Add("Click", msg.WhatsAppLink);
+        if (!string.IsNullOrEmpty(msg.WhatsAppLink)) req.Headers.Add("Click", msg.WhatsAppLink);
         try
         {
             using var res = await http.SendAsync(req, ct);
