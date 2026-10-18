@@ -114,7 +114,7 @@ export default function App() {
         <main className="win main-win" key={screen}>
           {screen === "title" && (
             <section className="pop">
-              <PartyRow name="Nick" role="Tech wizard" lv={99} hp={[9999, 9999]} mp={[999, 999]} portrait="N" />
+              <PartyRow name="Nick" role="Tech wizard" lv={99} hp={[9999, 9999]} mp={[999, 999]} portrait="N" image="/nick.webp" />
               <PartyRow name="Your device" role="Status: ???" hp={[12, 100]} portrait="?" hurt />
               <p className="lead">A wild broken laptop appeared. Book a home visit and Nick joins your party. Got a game or app idea? He builds those too.</p>
               <Menu label="Main menu" initial="book" onSelect={(k) => k === "book" ? go("quest") : window.open(WHATSAPP, "_blank")}
@@ -275,13 +275,16 @@ export default function App() {
   );
 }
 
-function PartyRow({ name, role, lv, hp, mp, mpLabel = "MP", portrait, hurt }: {
-  name: string; role: string; lv?: number; hp: [number, number]; mp?: [number, number]; mpLabel?: string; portrait: string; hurt?: boolean;
+function PartyRow({ name, role, lv, hp, mp, mpLabel = "MP", portrait, image, hurt }: {
+  name: string; role: string; lv?: number; hp: [number, number]; mp?: [number, number]; mpLabel?: string;
+  portrait: string; image?: string; hurt?: boolean;
 }) {
   const pct = Math.max(2, Math.round((hp[0] / hp[1]) * 100));
   return (
     <div className="party-row">
-      <div className={`portrait${hurt ? " hurt" : ""}`}>{portrait}</div>
+      {image
+        ? <img className="portrait-img" src={image} alt={`${name}'s portrait`} width={96} height={96} />
+        : <div className={`portrait${hurt ? " hurt" : ""}`}>{portrait}</div>}
       <div className="stats">
         <div className="name">{name} <span className="label">{role}</span></div>
         {lv !== undefined && <div><span className="label">LV</span> {lv}</div>}
