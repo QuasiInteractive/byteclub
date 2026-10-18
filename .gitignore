@@ -9,3 +9,6 @@ api/wwwroot/
 .env.*
 .vs/
 *.user
+
+# FF7 menu sounds: not ours, never committed. Copy in with deploy/copy-sfx.sh before building.
+web/public/sfx/
