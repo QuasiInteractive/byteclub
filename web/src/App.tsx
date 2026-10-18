@@ -19,6 +19,10 @@ const HELP: Record<Screen, string> = {
 };
 const WHATSAPP = "https://wa.me/61467696556"; // Byte Club WhatsApp (0467 696 556), live 2026-10-18
 
+// painted device art, one per kind of quest
+const ICON: Record<string, string> = { game: "/icon-controller.webp", app: "/icon-phone.webp", phone: "/icon-phone.webp" };
+const iconFor = (id?: string) => ICON[id ?? ""] ?? "/icon-computer.webp";
+
 type Party = { name: string; phone: string; email: string; suburb: string; address: string; problem: string };
 const EMPTY: Party = { name: "", phone: "", email: "", suburb: "", address: "", problem: "" };
 
@@ -115,7 +119,7 @@ export default function App() {
           {screen === "title" && (
             <section className="pop">
               <PartyRow name="Nick" role="Tech wizard" lv={99} hp={[9999, 9999]} mp={[999, 999]} portrait="N" image="/nick.webp" />
-              <PartyRow name="Your device" role="Status: ???" hp={[12, 100]} portrait="?" hurt />
+              <PartyRow name="Your device" role="Status: ???" hp={[12, 100]} portrait="?" image={iconFor()} hurt />
               <p className="lead">A wild broken laptop appeared. Book a home visit and Nick joins your party. Got a game or app idea? He builds those too.</p>
               <Menu label="Main menu" initial="book" onSelect={(k) => k === "book" ? go("quest") : window.open(WHATSAPP, "_blank")}
                     items={[{ key: "book", label: "Start a quest" }, { key: "whatsapp", label: "WhatsApp Nick" }]} />
@@ -140,8 +144,8 @@ export default function App() {
               {shown && (
                 <div className="sub-win">
                   {shown.isProject
-                    ? <PartyRow name={`Your ${shown.device.toLowerCase()}`} role={`Status: ${shown.status}`} hp={[shown.deviceHp, 100]} mp={[999, 999]} mpLabel="Ambition" portrait="★" />
-                    : <PartyRow name={`Your ${shown.device.toLowerCase()}`} role={`Status: ${shown.status}`} hp={[shown.deviceHp, 100]} portrait="?" hurt />}
+                    ? <PartyRow name={`Your ${shown.device.toLowerCase()}`} role={`Status: ${shown.status}`} hp={[shown.deviceHp, 100]} mp={[999, 999]} mpLabel="Ambition" portrait="★" image={iconFor(shown.id)} />
+                    : <PartyRow name={`Your ${shown.device.toLowerCase()}`} role={`Status: ${shown.status}`} hp={[shown.deviceHp, 100]} portrait="?" image={iconFor(shown.id)} hurt />}
                 </div>
               )}
             </section>
@@ -283,7 +287,8 @@ function PartyRow({ name, role, lv, hp, mp, mpLabel = "MP", portrait, image, hur
   return (
     <div className="party-row">
       {image
-        ? <img className="portrait-img" src={image} alt={`${name}'s portrait`} width={116} height={116} />
+        ? <img className={`portrait-img${hurt !== undefined || portrait !== "N" ? " device-img" : ""}`} src={image}
+               alt={portrait === "N" ? `${name}'s portrait` : ""} width={116} height={116} />
         : <div className={`portrait${hurt ? " hurt" : ""}`}>{portrait}</div>}
       <div className="stats">
         <div className="name">{name} <span className="label">{role}</span></div>
