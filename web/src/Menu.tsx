@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { Glove } from "./Glove";
 import { sfx } from "./sound";
 
-export type MenuItem = { key: string; label: ReactNode; hint?: string; disabled?: boolean; aside?: ReactNode };
+export type MenuItem = { key: string; label: ReactNode; hint?: string; disabled?: boolean; aside?: ReactNode; group?: string };
 
 type Props = {
   items: MenuItem[];
@@ -22,9 +22,16 @@ type Props = {
 // a click confirms (chime), Escape goes back. Each option is a real <button> for keyboards and
 // screen readers.
 export function Menu({ items, onSelect, onBack, onFocusChange, onRight, autoFocus = true, columns = 1, initial, label }: Props) {
-  const [focus, setFocus] = useState(() => Math.max(0, items.findIndex((i) => i.key === initial)));
+  const [focus, setFocusState] = useState(() => Math.max(0, items.findIndex((i) => i.key === initial)));
+  // The cursor lives in a ref as well, updated synchronously: a fast Up-Up-Enter must confirm the
+  // option the glove is on now, not the one React last rendered.
+  const cursor = useRef(focus);
+  const setFocus = (i: number) => { cursor.current = i; setFocusState(i); };
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const first = useRef(true);
+  // A key press that opened this menu can still be "in flight" (keyup/keypress) and would
+  // instantly confirm the first option here. Like a console menu, ignore input for a moment.
+  const openedAt = useRef(performance.now());
 
   useEffect(() => {
     // first render: only grab focus if asked; later moves always follow the cursor
@@ -35,10 +42,11 @@ export function Menu({ items, onSelect, onBack, onFocusChange, onRight, autoFocu
 
   const move = (to: number) => {
     const next = (to + items.length) % items.length;
-    if (next !== focus) { sfx.move(); setFocus(next); }
+    if (next !== cursor.current) { sfx.move(); setFocus(next); }
   };
 
   const choose = (i: number) => {
+    if (performance.now() - openedAt.current < 250) return;
     const item = items[i];
     if (!item || item.disabled) { sfx.error(); return; }
     sfx.confirm();
@@ -50,7 +58,12 @@ export function Menu({ items, onSelect, onBack, onFocusChange, onRight, autoFocu
       ? { ArrowDown: columns, ArrowUp: -columns, ArrowRight: 1, ArrowLeft: -1 }
       : { ArrowDown: 1, ArrowUp: -1 };
     const step = steps[e.key];
-    if (step !== undefined) { e.preventDefault(); move(focus + step); }
+    if (step !== undefined) { e.preventDefault(); move(cursor.current + step); }
+    else if (e.key === "Enter" || e.key === " ") {
+      // confirm on keydown only, once: no native click, no auto-repeat
+      e.preventDefault();
+      if (!e.repeat) choose(cursor.current);
+    }
     else if (e.key === "ArrowRight" && columns === 1 && onRight) { e.preventDefault(); sfx.move(); onRight(); }
     else if (e.key === "Escape" && onBack) { e.preventDefault(); sfx.back(); onBack(); }
   };
@@ -59,7 +72,11 @@ export function Menu({ items, onSelect, onBack, onFocusChange, onRight, autoFocu
     <div role="menu" aria-label={label} className="menu" onKeyDown={onKey}
          style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
       {items.map((item, i) => (
-        <button key={item.key} ref={(el) => { refs.current[i] = el; }} role="menuitem" type="button"
+        <Fragment key={item.key}>
+        {item.group && item.group !== items[i - 1]?.group && (
+          <div className="menu-group" role="presentation" style={{ gridColumn: "1 / -1" }}>{item.group}</div>
+        )}
+        <button ref={(el) => { refs.current[i] = el; }} role="menuitem" type="button"
                 className={`menu-item${i === focus ? " is-focus" : ""}${item.disabled ? " is-disabled" : ""}`}
                 aria-disabled={item.disabled || undefined} tabIndex={i === focus ? 0 : -1}
                 onMouseEnter={() => move(i)} onFocus={() => i !== focus && setFocus(i)} onClick={() => choose(i)}>
@@ -67,6 +84,7 @@ export function Menu({ items, onSelect, onBack, onFocusChange, onRight, autoFocu
           <span className="menu-label">{item.label}</span>
           {item.aside && <span className="menu-aside">{item.aside}</span>}
         </button>
+        </Fragment>
       ))}
     </div>
   );

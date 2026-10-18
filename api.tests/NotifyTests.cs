@@ -28,5 +28,5 @@ public class NotifyTests
     [InlineData("+64 21 190 2813", "64211902813")]  // already international
     [InlineData("+61 467 696 556", "61467696556")]
     public void WhatsApp_link_uses_international_numbers(string phone, string expected) =>
-        Assert.StartsWith($"https://wa.me/{expected}?text=Hi%20Mary", NtfyMessage.WhatsApp(phone, "Mary Jones"));
+        Assert.StartsWith($"https://wa.me/{expected}?text=Hi%20Mary", NtfyMessage.WhatsApp(phone, "Hi Mary"));
 }

@@ -5,6 +5,7 @@ namespace ByteClub.Api;
 public sealed class ByteClubDb(DbContextOptions<ByteClubDb> options) : DbContext(options)
 {
     public DbSet<Booking> Bookings => Set<Booking>();
+    public DbSet<Enquiry> Enquiries => Set<Enquiry>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -18,5 +19,9 @@ public sealed class ByteClubDb(DbContextOptions<ByteClubDb> options) : DbContext
             v => v.HasValue ? new DateTimeOffset(v.Value, TimeSpan.Zero) : null);
         // the database itself refuses a double booking, even if two requests race
         booking.HasIndex(x => x.ActiveSlot).IsUnique();
+
+        var enquiry = b.Entity<Enquiry>();
+        enquiry.Property(x => x.Status).HasConversion<string>();
+        enquiry.Property(x => x.CreatedAt).HasConversion(v => v.UtcTicks, v => new DateTimeOffset(v, TimeSpan.Zero));
     }
 }

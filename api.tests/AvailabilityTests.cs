@@ -68,3 +68,28 @@ public class ValidationTests
         Assert.Equal("Enter a phone number Nick can WhatsApp.", e["phone"]);
     }
 }
+
+public class ProjectQuestTests
+{
+    private static EnquiryRequest Game(string idea) => new("game", "Sam Lee", "0412 345 678", null, idea);
+
+    [Fact]
+    public void An_enquiry_needs_a_real_idea()
+    {
+        Assert.Empty(BookingValidation.Validate(Game("A cosy farming game for PC")));
+        var e = BookingValidation.Validate(Game("game"));
+        Assert.Equal(["idea"], e.Keys);
+        Assert.Equal("Tell Nick your idea in a sentence or two.", e["idea"]);
+    }
+
+    [Fact]
+    public void Project_notification_is_marked_and_greets_about_the_idea()
+    {
+        var e = new Enquiry { ServiceId = "app", Name = "Sam Lee", Phone = "0412 345 678", Idea = "Booking app for my gym" };
+        var m = NtfyMessage.For(e, Services.Find("app")!);
+        Assert.Equal("New PROJECT quest: Build an app", m.Title);
+        Assert.Contains("\"Booking app for my gym\"", m.Body);
+        Assert.Contains("your%20app%20idea", m.WhatsAppLink);
+        Assert.DoesNotContain("video", m.Body, StringComparison.OrdinalIgnoreCase);
+    }
+}

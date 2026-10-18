@@ -1,12 +1,15 @@
 export type Service = {
   id: string; name: string; blurb: string; device: string; status: string; deviceHp: number;
+  kind: "visit" | "project"; isProject: boolean;
 };
 export type Slot = { start: string; end: string };
 export type BookingRequest = {
   serviceId: string; start: string; name: string; phone: string; email?: string;
-  suburb: string; address: string; problem?: string;
+  suburb?: string; address?: string; problem?: string;
 };
 export type BookingResult = { id: string; service: string; start: string; firstName: string };
+export type EnquiryRequest = { serviceId: string; name: string; phone: string; email?: string; idea: string };
+export type EnquiryResult = { id: string; service: string; firstName: string; start?: undefined };
 
 export class ApiError extends Error {
   fields: Record<string, string>;
@@ -32,6 +35,9 @@ async function json<T>(res: Response): Promise<T> {
 export const api = {
   services: () => fetch("/api/services").then((r) => json<Service[]>(r)),
   slots: () => fetch("/api/slots").then((r) => json<Slot[]>(r)),
+  enquire: (e: EnquiryRequest) =>
+    fetch("/api/enquiries", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(e) })
+      .then((r) => json<EnquiryResult>(r)),
   book: (b: BookingRequest) =>
     fetch("/api/bookings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) })
       .then((r) => json<BookingResult>(r)),

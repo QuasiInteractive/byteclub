@@ -13,12 +13,14 @@ builder.Services.AddDbContext<ByteClubDb>(o =>
 builder.Services.AddSingleton(builder.Configuration.GetSection("Notify").Get<NotifyOptions>() ?? new());
 builder.Services.AddHttpClient<IBookingNotifier, NtfyNotifier>(c => c.Timeout = TimeSpan.FromSeconds(5));
 builder.Services.AddProblemDetails();
+// bookings + enquiries per visitor (IP) per 10 minutes; tests raise it
+var perTenMinutes = builder.Configuration.GetValue<int?>("RateLimit:PerTenMinutes") ?? 5;
 builder.Services.AddRateLimiter(o =>
 {
     o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     o.AddPolicy("bookings", ctx => RateLimitPartition.GetFixedWindowLimiter(
         ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-        _ => new FixedWindowRateLimiterOptions { PermitLimit = 5, Window = TimeSpan.FromMinutes(10) }));
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = perTenMinutes, Window = TimeSpan.FromMinutes(10) }));
 });
 
 var app = builder.Build();
@@ -36,7 +38,8 @@ api.MapGet("/services", () => Services.All);
 
 api.MapGet("/slots", async (ByteClubDb db, Availability av) => av.OpenSlots(await TakenSlots(db)));
 
-api.MapPost("/bookings", async (BookingRequest req, ByteClubDb db, Availability av, TimeProvider clock, IBookingNotifier notify) =>
+api.MapPost("/bookings", async (BookingRequest req, ByteClubDb db, Availability av, TimeProvider clock,
+    IBookingNotifier notify, NotifyOptions notifyOptions) =>
 {
     var errors = BookingValidation.Validate(req);
     if (errors.Count > 0)
@@ -56,9 +59,31 @@ api.MapPost("/bookings", async (BookingRequest req, ByteClubDb db, Availability 
     catch (DbUpdateException) { return Results.Conflict(new { error = "That time was just taken. Pick another." }); }
 
     var service = Services.Find(req.ServiceId)!;
-    await notify.NotifyAsync(booking, service); // logs and carries on if ntfy is down
+    var tz = TimeZoneInfo.FindSystemTimeZoneById(notifyOptions.TimeZone);
+    await notify.SendAsync(NtfyMessage.For(booking, service, tz)); // logs and carries on if ntfy is down
     return Results.Created($"/api/bookings/{booking.Id}",
         new { booking.Id, service = service.Name, booking.Start, firstName = booking.Name.Split(' ')[0] });
+}).RequireRateLimiting("bookings");
+
+// Game and app ideas: no time slot, Nick follows up on WhatsApp.
+api.MapPost("/enquiries", async (EnquiryRequest req, ByteClubDb db, TimeProvider clock, IBookingNotifier notify) =>
+{
+    var errors = BookingValidation.Validate(req);
+    if (errors.Count > 0)
+        return Results.ValidationProblem(errors.ToDictionary(e => e.Key, e => new[] { e.Value }));
+
+    var enquiry = new Enquiry
+    {
+        ServiceId = req.ServiceId, Name = req.Name.Trim(), Phone = req.Phone.Trim(), Email = req.Email?.Trim(),
+        Idea = req.Idea.Trim(), CreatedAt = clock.GetUtcNow(),
+    };
+    db.Enquiries.Add(enquiry);
+    await db.SaveChangesAsync();
+
+    var service = Services.Find(req.ServiceId)!;
+    await notify.SendAsync(NtfyMessage.For(enquiry, service));
+    return Results.Created($"/api/enquiries/{enquiry.Id}",
+        new { enquiry.Id, service = service.Name, firstName = enquiry.Name.Split(' ')[0] });
 }).RequireRateLimiting("bookings");
 
 app.MapGet("/healthz", () => Results.Ok(new { ok = true }));
