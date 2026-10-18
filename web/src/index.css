@@ -168,3 +168,7 @@ a { color: var(--cyan); }
 @media (max-width: 720px) { .portrait-img { width: 92px; height: 92px; } }
 .portrait { margin: 0 22px 0 18px; } /* centre the small boxes under the 116px portrait */
 @media (max-width: 720px) { .portrait { margin: 0 8px 0 6px; } }
+
+/* device art: a touch smaller than Nick's portrait so he stays the hero */
+.device-img { width: 100px; height: 100px; margin: -6px 4px -6px 0; }
+@media (max-width: 720px) { .device-img { width: 82px; height: 82px; } }
