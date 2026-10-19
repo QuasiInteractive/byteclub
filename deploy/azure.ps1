@@ -8,7 +8,10 @@
 param(
     [string]$ResourceGroup = "byteclub-rg",
     [string]$Location = "australiaeast",
-    [string]$Image = "ghcr.io/quasiinteractive/byteclub:latest"
+    [string]$Image = "ghcr.io/quasiinteractive/byteclub:latest",
+    # one Container Apps environment per region on this subscription: share Clausewise's
+    [string]$Environment = "clausewise-env",
+    [string]$EnvironmentGroup = "clausewise-rg"
 )
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path $PSScriptRoot -Parent)
@@ -29,16 +32,20 @@ az provider register --namespace Microsoft.App --wait
 # --- you are the only database admin -----------------------------------------------------------
 $me = az ad signed-in-user show --query "{id:id, upn:userPrincipalName}" -o json | ConvertFrom-Json
 
+$envId = az containerapp env show -g $EnvironmentGroup -n $Environment --query id -o tsv
+if (-not $envId) { throw "Couldn't find the Container Apps environment $Environment in $EnvironmentGroup." }
+
 Write-Host "Deploying (about 5 minutes)..."
 az group create --name $ResourceGroup --location $Location --output none
 $out = az deployment group create `
     --resource-group $ResourceGroup `
     --template-file infra/main.bicep `
-    --parameters image=$Image adminObjectId=$($me.id) adminLogin=$($me.upn) `
+    --parameters image=$Image environmentId=$envId adminObjectId=$($me.id) adminLogin=$($me.upn) `
         ntfyTopic=$(Secret 'Notify:NtfyTopic') bsb=$(Secret 'Business:Bsb') `
         accountNumber=$(Secret 'Business:AccountNumber') accountName=$(Secret 'Business:AccountName') `
         payId=$(Secret 'Business:PayId') `
     --query properties.outputs -o json | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0 -or -not $out) { throw "The deployment failed (see the error above). Nothing else was changed." }
 $sqlServer = $out.sqlServer.value
 $appName = $out.appIdentityName.value
 
