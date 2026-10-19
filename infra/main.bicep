@@ -8,6 +8,9 @@
 param location string = 'australiaeast'
 param image string = 'ghcr.io/quasiinteractive/byteclub:latest'
 
+@description('An existing Container Apps environment. Free subscriptions get one per region, so Byte Club shares the Clausewise one.')
+param environmentId string
+
 @description('Nick\'s Entra object id and sign-in name: the only SQL admin.')
 param adminObjectId string
 param adminLogin string
@@ -67,32 +70,12 @@ resource db 'Microsoft.Sql/servers/databases@2023-08-01-preview' = {
   }
 }
 
-resource logs 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
-  name: '${name}-logs'
-  location: location
-  properties: { sku: { name: 'PerGB2018' }, retentionInDays: 30 }
-}
-
-resource env 'Microsoft.App/managedEnvironments@2024-03-01' = {
-  name: '${name}-env'
-  location: location
-  properties: {
-    appLogsConfiguration: {
-      destination: 'log-analytics'
-      logAnalyticsConfiguration: {
-        customerId: logs.properties.customerId
-        sharedKey: logs.listKeys().primarySharedKey
-      }
-    }
-  }
-}
-
 resource app 'Microsoft.App/containerApps@2024-03-01' = {
   name: name
   location: location
   identity: { type: 'SystemAssigned' }
   properties: {
-    managedEnvironmentId: env.id
+    managedEnvironmentId: environmentId
     configuration: {
       ingress: { external: true, targetPort: 8080, transport: 'auto', allowInsecure: false }
       secrets: [
