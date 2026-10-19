@@ -1,6 +1,6 @@
 # Byte Club
 
-**Live:** https://byteclub.quasi-interactive.com (coming online)
+**Live:** https://byteclub.quasi-interactive.com
 
 Booking app for Byte Club, Gold Coast home-visit tech help, dressed as a late-90s JRPG pause menu,
 plus Nick's dashboard for running the business.
