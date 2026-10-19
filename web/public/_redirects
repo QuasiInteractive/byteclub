@@ -1,0 +1,4 @@
+# Netlify serves the site; the API stays on Azure Container Apps and is proxied, so the browser
+# only ever talks to one origin (the admin sign-in cookie is SameSite=Strict).
+/api/*  https://byteclub.bluewater-bad1ebb8.australiaeast.azurecontainerapps.io/api/:splat  200
+/*      /index.html  200

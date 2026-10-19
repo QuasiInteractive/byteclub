@@ -32,9 +32,24 @@ async function json<T>(res: Response): Promise<T> {
   throw new ApiError(body.error ?? "Something went wrong. Try again, or WhatsApp Nick.", {}, res.status);
 }
 
+// The API sleeps when nobody's booking. While it wakes, the proxy in front of it times out (502-504)
+// or the request fails outright, so reads keep trying for up to three minutes before giving up.
+async function getWhileWaking<T>(url: string): Promise<T> {
+  const giveUp = Date.now() + 180_000;
+  for (;;) {
+    try {
+      const res = await fetch(url);
+      if (res.status < 502 || res.status > 504 || Date.now() > giveUp) return json<T>(res);
+    } catch (e) {
+      if (Date.now() > giveUp) throw e;
+    }
+    await new Promise((r) => setTimeout(r, 4000));
+  }
+}
+
 export const api = {
-  services: () => fetch("/api/services").then((r) => json<Service[]>(r)),
-  slots: () => fetch("/api/slots").then((r) => json<Slot[]>(r)),
+  services: () => getWhileWaking<Service[]>("/api/services"),
+  slots: () => getWhileWaking<Slot[]>("/api/slots"),
   enquire: (e: EnquiryRequest) =>
     fetch("/api/enquiries", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(e) })
       .then((r) => json<EnquiryResult>(r)),
