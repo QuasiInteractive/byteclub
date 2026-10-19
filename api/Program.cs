@@ -56,8 +56,11 @@ var perTenMinutes = builder.Configuration.GetValue<int?>("RateLimit:PerTenMinute
 builder.Services.AddRateLimiter(o =>
 {
     o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    // the site is served by Netlify, which proxies /api here: the address Azure sees is Netlify's,
+    // so the visitor's own IP comes from the header Netlify adds
     o.AddPolicy("bookings", ctx => RateLimitPartition.GetFixedWindowLimiter(
-        ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        ctx.Request.Headers["X-Nf-Client-Connection-Ip"].FirstOrDefault()
+            ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = perTenMinutes, Window = TimeSpan.FromMinutes(10) }));
 });
 
