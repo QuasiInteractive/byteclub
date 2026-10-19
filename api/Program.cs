@@ -63,7 +63,15 @@ builder.Services.AddRateLimiter(o =>
 
 var app = builder.Build();
 
-await EnsureDatabase(app);
+// The page must never wait for the database: a paused free-tier database takes up to a minute
+// to wake. Serve the site at once and wake the database in the background; only requests that
+// need it wait for it.
+var dbReady = EnsureDatabase(app);
+app.Use(async (ctx, next) =>
+{
+    if (ctx.Request.Path.StartsWithSegments("/api") && !dbReady.IsCompleted) await dbReady;
+    await next();
+});
 
 app.UseForwardedHeaders();
 app.UseRateLimiter();
@@ -144,10 +152,10 @@ static async Task EnsureDatabase(WebApplication app)
             await scope.ServiceProvider.GetRequiredService<ByteClubDb>().Database.EnsureCreatedAsync();
             return;
         }
-        catch (Exception e) when (attempt < 8)
+        catch (Exception e) when (attempt < 24)
         {
             app.Logger.LogWarning("Database not ready ({Message}); retrying", e.Message);
-            await Task.Delay(TimeSpan.FromSeconds(10));
+            await Task.Delay(TimeSpan.FromSeconds(5));
         }
     }
 }

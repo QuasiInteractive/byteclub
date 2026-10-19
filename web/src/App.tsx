@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, dayKey, fmtDay, fmtTime, type BookingResult, type EnquiryResult, type Service, type Slot } from "./api";
 import { Glove } from "./Glove";
 import { Menu } from "./Menu";
@@ -49,11 +49,20 @@ export default function App() {
   const shown = peek ?? quest;
   const project = quest?.isProject ?? false;
 
+  // Times are fetched as soon as the page opens: that also wakes the server's database, which
+  // sleeps when nobody's booking, while the customer is still choosing a quest.
+  const slotsLoading = useRef(false);
+  const [waking, setWaking] = useState(false);
   const loadSlots = () => {
+    if (slotsLoading.current) return;
+    slotsLoading.current = true;
     setSlots(null);
+    const slow = setTimeout(() => setWaking(true), 4000);
     api.slots().then((s) => { setSlots(s); setDay((d) => d ?? (s[0] ? dayKey(s[0].start) : null)); })
-      .catch(() => setMessage("Couldn't load times. Refresh, or WhatsApp Nick."));
+      .catch(() => setMessage("Couldn't load times. Refresh, or WhatsApp Nick."))
+      .finally(() => { clearTimeout(slow); setWaking(false); slotsLoading.current = false; });
   };
+  useEffect(loadSlots, []);
 
   const days = useMemo(() => {
     const m = new Map<string, Slot[]>();
@@ -172,7 +181,9 @@ export default function App() {
           {screen === "time" && (
             <section className="pop">
               <h1 className="win-title">Time gate</h1>
-              {slots === null ? <p className="lead blink">Opening the time gate…</p> : days.size === 0 ? (
+              {slots === null ? (
+                <p className="lead blink">{waking ? "Waking the time gate… after a quiet spell this takes up to a minute." : "Opening the time gate…"}</p>
+              ) : days.size === 0 ? (
                 <p className="lead">No free times in the next two weeks. <a href={WHATSAPP}>WhatsApp Nick</a> and he'll fit you in.</p>
               ) : (
                 <div className="time-grid">
