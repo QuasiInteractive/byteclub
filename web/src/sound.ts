@@ -38,13 +38,21 @@ function audio(): AudioContext {
   return ctx;
 }
 
+// The clips start downloading as soon as the page opens, so they're ready by the first click.
+// (Decoding needs an AudioContext, and browsers only allow one after the visitor interacts.)
+const SFX_NAMES: Sfx[] = ["move", "confirm", "back", "error", "victory"];
+const raw = new Map<Sfx, Promise<ArrayBuffer | null>>(
+  SOUND_SET === "ff7"
+    ? SFX_NAMES.map((n) => [n, fetch(`/sfx/${n}.mp3`).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null)])
+    : [],
+);
+
 async function preload(a: AudioContext) {
-  const names: Sfx[] = ["move", "confirm", "back", "error", "victory"];
-  await Promise.all(names.map(async (n) => {
+  await Promise.all(SFX_NAMES.map(async (n) => {
     try {
-      const res = await fetch(`/sfx/${n}.mp3`);
-      if (!res.ok) throw new Error(String(res.status));
-      buffers.set(n, await a.decodeAudioData(await res.arrayBuffer()));
+      const bytes = await raw.get(n);
+      if (!bytes) throw new Error("missing");
+      buffers.set(n, await a.decodeAudioData(bytes.slice(0)));
     } catch {
       buffers.set(n, null); // missing clip: that sound uses the synth instead
     }

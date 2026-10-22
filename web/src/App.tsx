@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { SERVICES } from "./services";
 import { api, ApiError, dayKey, fmtDay, fmtTime, type BookingResult, type EnquiryResult, type Service, type Slot } from "./api";
 import { Glove } from "./Glove";
 import { Menu } from "./Menu";
@@ -28,7 +29,7 @@ const EMPTY: Party = { name: "", phone: "", email: "", suburb: "", address: "", 
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("title");
-  const [services, setServices] = useState<Service[]>([]);
+  const [services, setServices] = useState<Service[]>(SERVICES);
   const [slots, setSlots] = useState<Slot[] | null>(null);
   const [quest, setQuest] = useState<Service | null>(null);
   const [peek, setPeek] = useState<Service | null>(null);
@@ -42,7 +43,8 @@ export default function App() {
   const [sound, setSoundState] = useState(soundOn());
   const [now, setNow] = useState(new Date());
 
-  useEffect(() => { api.services().then(setServices).catch(() => setMessage("Couldn't load quests. Refresh, or WhatsApp Nick.")); }, []);
+  // quests show straight away from the built-in list; the API copy replaces it quietly once the server is awake
+  useEffect(() => { api.services().then((s) => { if (s.length) setServices(s); }).catch(() => {}); }, []);
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 15000); return () => clearInterval(t); }, []);
 
   const go = (s: Screen) => { setMessage(""); setScreen(s); };
